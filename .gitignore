@@ -1,0 +1,4 @@
+*.o
+mandel/*
+output/*
+build/*
