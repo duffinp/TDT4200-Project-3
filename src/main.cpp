@@ -206,7 +206,8 @@ void fillBlock(std::vector<std::vector<int>> &dwellBuffer,
 
 typedef struct job {
    std::vector<std::vector<int>> &dwellBuffer;
-   int const dwell;
+   std::complex<double> &cmin;
+   std::complex<double> &dc;
    unsigned int const atY;
    unsigned int const atX;
    unsigned int const blockSize;
