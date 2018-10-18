@@ -33,7 +33,7 @@ static unsigned int subDiv = 4;
 static unsigned int res = 1024;
 static unsigned int maxDwell = 512;
 static bool mark = false;
-const unsigned int numThreads = 4;			//Number of threads we use in parallel.
+const unsigned int numThreads = 16;			//Number of threads we use in parallel.
 
 static constexpr const int  dwellFill = std::numeric_limits<int>::max();
 static constexpr const int  dwellCompute = std::numeric_limits<int>::max()-1;
@@ -133,6 +133,50 @@ int commonBorder(std::vector<std::vector<int>> &dwellBuffer,
 	return commonDwell;
 }
 
+void threadedSide(std::vector<std::vector<int>> &dwellBuffer,
+				 std::complex<double> const &cmin,
+				 std::complex<double> const &dc,
+				 unsigned int const atY,
+				 unsigned int const atX,
+				 unsigned int const blockSize,
+				 std::vector<int> &commonDwell,
+				 unsigned int s) {
+	unsigned int const yMax = (res > atY + blockSize - 1) ? atY + blockSize - 1 : res - 1;
+	unsigned int const xMax = (res > atX + blockSize - 1) ? atX + blockSize - 1 : res - 1;
+	for (unsigned int i = 0; i < blockSize; i++) {
+		unsigned const int y = s % 2 == 0 ? atY + i : (s == 1 ? yMax : atY);
+		unsigned const int x = s % 2 != 0 ? atX + i : (s == 0 ? xMax : atX);
+		if (y < res && x < res) {
+			if (dwellBuffer.at(y).at(x) < 0) {
+				dwellBuffer.at(y).at(x) = pixelDwell(cmin, dc, y, x);
+			}
+			if (commonDwell.at(s) == -1) {
+				commonDwell.at(s) = dwellBuffer.at(y).at(x);
+			} else if (commonDwell.at(s) != dwellBuffer.at(y).at(x)) {
+				commonDwell.at(s) = -1;
+				return;
+			}
+		}
+	}
+}
+
+void threadedCommonBorder(std::vector<std::vector<int>> &dwellBuffer,
+				 std::complex<double> const &cmin,
+				 std::complex<double> const &dc,
+				 unsigned int const atY,
+				 unsigned int const atX,
+				 unsigned int const blockSize,
+				 std::vector<int> &commonDwell)
+{
+	std::thread borders[4];			//Each thread runs its own border
+	for (unsigned int s = 0; s < 4; s++) {
+		borders[s] = std::thread(threadedSide, std::ref(dwellBuffer), std::ref(cmin), std::ref(dc), atY, atX, blockSize, std::ref(commonDwell), s);
+	}
+	for (unsigned int s = 0; s < 4; s++) {
+		borders[s].join();
+	}
+}
+
 void markBorder(std::vector<std::vector<int>> &dwellBuffer,
 				int const dwell,
 				unsigned int const atY,
@@ -230,9 +274,23 @@ void marianiSilver( std::vector<std::vector<int>> &dwellBuffer,
 					std::complex<double> const &dc,
 					unsigned int const atY,
 					unsigned int const atX,
-					unsigned int const blockSize)
+					unsigned int const blockSize,
+					bool threaded)
 {
-	int dwell = commonBorder(dwellBuffer, cmin, dc, atY, atX, blockSize);
+	int dwell;
+	if (threaded) {
+		std::vector<int> commonDwell = {-1, -1, -1, -1};
+		threadedCommonBorder(dwellBuffer, cmin, dc, atY, atX, blockSize, commonDwell);	
+		dwell = commonDwell.at(0);
+		for (unsigned int s = 0; s < 4; s++) {
+			if (commonDwell.at(s) == -1 || commonDwell.at(s) != commonDwell.at(0)) {
+				dwell = -1;
+				break;
+			}
+		}
+	} else {
+		dwell = commonBorder(dwellBuffer, cmin, dc, atY, atX, blockSize);
+	}
 	if ( dwell >= 0 ) {
 		fillBlock(dwellBuffer, dwell, atY, atX, blockSize);
 		if (mark)
@@ -246,7 +304,7 @@ void marianiSilver( std::vector<std::vector<int>> &dwellBuffer,
 		unsigned int newBlockSize = blockSize / subDiv;
 		for (unsigned int ydiv = 0; ydiv < subDiv; ydiv++) {
 			for (unsigned int xdiv = 0; xdiv < subDiv; xdiv++) {
-				marianiSilver(dwellBuffer, cmin, dc, atY + (ydiv * newBlockSize), atX + (xdiv * newBlockSize), newBlockSize);
+				marianiSilver(dwellBuffer, cmin, dc, atY + (ydiv * newBlockSize), atX + (xdiv * newBlockSize), newBlockSize, threaded);
 			}
 		}
 	}
@@ -265,6 +323,7 @@ void help() {
 	std::cout << "\t" << "-d [subdivison]" << "\t" << "subdivision of blocks (default=4)" << std::endl;
 	std::cout << "\t" << "-m" << "\t" << "mark Mariani-Silver borders" << std::endl;
 	std::cout << "\t" << "-t" << "\t" << "traditional computation (no Mariani-Silver)" << std::endl;
+	std::cout << "\t" << "-a" << "\t" << "non-threaded computation" << std::endl;
 }
 
 void worker(void) {
@@ -281,10 +340,11 @@ int main( int argc, char *argv[] )
 	bool mariani = true;
 	bool quiet = false;
 	bool threaded = true;
+	unsigned int omitBorders = 1;
 
 	{
 		char c;
-		while((c = getopt(argc,argv,"x:y:s:r:o:i:c:b:d:mthq"))!=-1) {
+		while((c = getopt(argc,argv,"x:y:s:r:o:i:c:b:d:mthqa"))!=-1) {
 			switch(c) {
 				case 'x':
 					x = num::clamp(atof(optarg),0.0,1.0);
@@ -316,6 +376,9 @@ int main( int argc, char *argv[] )
 					break;
 				case 't':
 					mariani = false;
+					break;
+				case 'a':
+					threaded = false;
 					break;
 				case 'q':
 					quiet = true;
@@ -370,12 +433,12 @@ int main( int argc, char *argv[] )
 		// Calculate a dividable resolution for the blockSize:
 		unsigned int const correctedBlockSize = std::pow(subDiv,numDiv) * blockDim;
 		// Mariani-Silver subdivision algorithm
-		marianiSilver(dwellBuffer, cmin, dc, 0, 0, correctedBlockSize);
+		marianiSilver(dwellBuffer, cmin, dc, 0, 0, correctedBlockSize, threaded);
 	} else {
 		// Traditional Mandelbrot-Set computation or the 'Escape Time' algorithm
 		if (threaded) {
 			for (unsigned int i = 0; i < numThreads; i++) {
-				threads[i] = std::thread(threadedComputeBlock, std::ref(dwellBuffer), std::ref(cmin), std::ref(dc), 0, 0, res, i, 1);
+				threads[i] = std::thread(threadedComputeBlock, std::ref(dwellBuffer), std::ref(cmin), std::ref(dc), 0, 0, res, i, omitBorders);
 			}
 			for (unsigned int i = 0; i < numThreads; i++) {
 				threads[i].join();

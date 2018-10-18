@@ -33,6 +33,7 @@ cI=1
 MARK=""
 BLOCKDIM=16
 TRADITIONAL=""
+THREADED=""
 SUBDIV=4
 }
 
@@ -58,7 +59,7 @@ which tput >/dev/null 2>&1 || {
 
 mkdir -p $OUTDIR
 printf "\rRender initial image..."
-TIME=$(/usr/bin/time -f "%E" $BIN -q -r $RES -x $X -y $Y -s $S -i $I -c $cI -b $BLOCKDIM -d $SUBDIV -o $OUT $MARK $TRADITIONAL 2>&1 >/dev/null)
+TIME=$(/usr/bin/time -f "%E" $BIN -q -r $RES -x $X -y $Y -s $S -i $I -c $cI -b $BLOCKDIM -d $SUBDIV -o $OUT $MARK $TRADITIONAL $THREADED 2>&1 >/dev/null)
 [ $? -ne 0 ] && {
     echo "Failed to render initial image!"
     exit 1
@@ -89,12 +90,13 @@ function help() {
     printf "[J] subdivision up     [j] subdivision down\n"
     printf "[M] increase move      [m] decrease move\n"
     printf "[S] step up            [s] step down\n"
-    printf "[f] toogle mariani borders on/off\n"
+    printf "[t] toogle mariani borders on/off\n"
     printf "[p] toogle rendering on/off\n"
     printf "[e] toggle mariani algorithm on/off\n"
+    printf "[a] toggle threading on/off\n"
     printf "[o] rerender\n\n"
 
-    printf "Currently calling: %s\n" "$BIN -q -r $RES -x $X -y $Y -s $S -i $I -c $cI -b $BLOCKDIM -d $SUBDIV -o $OUT $MARK $TRADITIONAL"
+    printf "Currently calling: %s\n" "$BIN -q -r $RES -x $X -y $Y -s $S -i $I -c $cI -b $BLOCKDIM -d $SUBDIV -o $OUT $MARK $TRADITIONAL $THREADED"
 
     printf "\nPress any key to continue..."
     read -n 1 -s
@@ -112,6 +114,7 @@ while [ $EXEC -gt 0 ]; do
     printf "Step:           %s %%\n" $(echo "(($STEP - 1) * 100)" | bc -l)
     printf "Resolution:     %llux%llu\n\n" $RES $RES
     printf "Algorithm:      %s\n" $(echo $TRADITIONAL | grep -q '\-t' && echo "Traditional" || echo "Mariani-Silver")
+    printf "Threading:      %s\n" $(echo $THREADED | grep -q '\-a' && echo "Non-threaded" || echo "Threaded")
     printf "Rendering time: %s\n\n" $TIME
     printf "[q] quit [h] help "
     [ $PAUSE -eq 1 ] && printf "[p] resume rendering" || printf "[p] pause rendering"
@@ -223,6 +226,10 @@ while [ $EXEC -gt 0 ]; do
             [ "$TRADITIONAL" == "-t" ] && TRADITIONAL="" || TRADITIONAL="-t"
             EXEC=1
             ;;
+        a|A)
+            [ "$THREADED" == "-a" ] && THREADED="" || THREADED="-a"
+            EXEC=1
+            ;;
         o|O)
             EXEC=1
             ;;
@@ -236,7 +243,7 @@ while [ $EXEC -gt 0 ]; do
 
     [ $EXEC -eq 1 ] && [ $PAUSE -eq 0 ] && {
         printf "\rRender new image...                   "
-        TIME=$(/usr/bin/time -f "%E" $BIN -q -r $RES -x $X -y $Y -s $S -i $I -c $cI -b $BLOCKDIM -d $SUBDIV -o $OUT $MARK $TRADITIONAL 2>&1 >/dev/null)
+        TIME=$(/usr/bin/time -f "%E" $BIN -q -r $RES -x $X -y $Y -s $S -i $I -c $cI -b $BLOCKDIM -d $SUBDIV -o $OUT $MARK $TRADITIONAL $THREADED 2>&1 >/dev/null)
         [ $? -ne 0 ] && {
             echo "Failed rendering image!"
             exit 1

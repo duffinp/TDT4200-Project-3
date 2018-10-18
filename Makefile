@@ -15,6 +15,9 @@ endif
 ifeq ($(TRADITIONAL),1)
 	ARGUMENTS := $(ARGUMENTS) -t
 endif
+ifeq ($(THREADED),1)
+	ARGUMENTS := $(ARGUMENTS) -a
+endif
 
 SOURCE_DIR := src
 BUILD_DIR  := mandel
@@ -63,6 +66,7 @@ help:
 	@echo "	OUTPUT=$(OUTPUT)"
 	@echo "	MARK=$(MARK)"
 	@echo "	TRADITIONAL=$(TRADITIONAL)"
+	@echo "	THREADED=$(THREADED)"
 	@echo "	PROFILE=$(PROFILE)"
 	@echo ""
 	@echo "Compiler Call:"
