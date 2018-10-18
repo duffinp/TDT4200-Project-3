@@ -3,6 +3,9 @@
 #include <iostream>
 #include <cmath>
 #include <string>
+#include <thread>
+#include <chrono>
+#include <iomanip>
 #include "utilities/lodepng.h"
 #include "utilities/rgba.hpp"
 #include "utilities/num.hpp"
@@ -30,6 +33,7 @@ static unsigned int subDiv = 4;
 static unsigned int res = 1024;
 static unsigned int maxDwell = 512;
 static bool mark = false;
+const unsigned int numThreads = 4;			//Number of threads we use in parallel.
 
 static constexpr const int  dwellFill = std::numeric_limits<int>::max();
 static constexpr const int  dwellCompute = std::numeric_limits<int>::max()-1;
@@ -148,8 +152,7 @@ void markBorder(std::vector<std::vector<int>> &dwellBuffer,
 	}
 }
 
-// Currently the same as computeBlock
-void threadedComputeBlock(std::vector<std::vector<int>> &dwellBuffer,
+void computeBlock(std::vector<std::vector<int>> &dwellBuffer,
 	std::complex<double> const &cmin,
 	std::complex<double> const &dc,
 	unsigned int const atY,
@@ -166,16 +169,18 @@ void threadedComputeBlock(std::vector<std::vector<int>> &dwellBuffer,
 	}
 }
 
-void computeBlock(std::vector<std::vector<int>> &dwellBuffer,
+void threadedComputeBlock(std::vector<std::vector<int>> &dwellBuffer,
 	std::complex<double> const &cmin,
 	std::complex<double> const &dc,
-	unsigned int const atY,
-	unsigned int const atX,
-	unsigned int const blockSize,
-	unsigned int const omitBorder = 0)
+	unsigned int atY,
+	unsigned int atX,
+	unsigned int blockSize,
+	unsigned int i,
+	unsigned int omitBorder = 0)
 {
+	atX += blockSize * i / numThreads;
 	unsigned int const yMax = (res > atY + blockSize) ? atY + blockSize : res;
-	unsigned int const xMax = (res > atX + blockSize) ? atX + blockSize : res;
+	unsigned int const xMax = ((res > atX + blockSize/numThreads) ? atX + blockSize/numThreads : res * (i + 1)/numThreads);
 	for (unsigned int y = atY + omitBorder; y < yMax - omitBorder; y++) {
 		for (unsigned int x = atX + omitBorder; x < xMax - omitBorder; x++) {
 			dwellBuffer.at(y).at(x) = pixelDwell(cmin, dc, y, x);
@@ -269,11 +274,13 @@ void worker(void) {
 int main( int argc, char *argv[] )
 {
 	std::string output = "output.png";
+	std::thread threads[numThreads];
 	double x = 0.5, y = 0.5;
 	double scale = 1;
 	unsigned int colourIterations = 1;
 	bool mariani = true;
 	bool quiet = false;
+	bool threaded = true;
 
 	{
 		char c;
@@ -335,9 +342,12 @@ int main( int argc, char *argv[] )
 	double const xlen = std::abs(xmin - xmax);
 	double const ylen = std::abs(ymin - ymax);
 
-	std::complex<double> const cmin(xmin + (0.5 * (1 - scale) * xlen),ymin + (0.5 * (1 - scale) * ylen));
-	std::complex<double> const cmax(xmax - (0.5 * (1 - scale) * xlen),ymax - (0.5 * (1 - scale) * ylen));
-	std::complex<double> const dc = cmax - cmin;
+	std::complex<double> cmin(xmin + (0.5 * (1 - scale) * xlen),ymin + (0.5 * (1 - scale) * ylen));
+	std::complex<double> cmax(xmax - (0.5 * (1 - scale) * xlen),ymax - (0.5 * (1 - scale) * ylen));
+	std::complex<double> dc = cmax - cmin;
+	std::complex<double> dc_real(dc.real(), 0.0);
+	std::complex<double> dc_imag(0.0, dc.imag());
+	std::complex<double> two(2.0, 0.0);
 
 	if (!quiet) {
 		std::cout << std::fixed;
@@ -363,7 +373,18 @@ int main( int argc, char *argv[] )
 		marianiSilver(dwellBuffer, cmin, dc, 0, 0, correctedBlockSize);
 	} else {
 		// Traditional Mandelbrot-Set computation or the 'Escape Time' algorithm
-		computeBlock(dwellBuffer, cmin, dc, 0, 0, res, 0);
+		if (threaded) {
+			for (unsigned int i = 0; i < numThreads; i++) {
+				threads[i] = std::thread(threadedComputeBlock, std::ref(dwellBuffer), std::ref(cmin), std::ref(dc), 0, 0, res, i, 1);
+			}
+			for (unsigned int i = 0; i < numThreads; i++) {
+				threads[i].join();
+			}	
+		}
+		else {
+			computeBlock(dwellBuffer, cmin, dc, 0, 0, res, 0);
+		}
+		
 		if (mark)
 			markBorder(dwellBuffer, dwellCompute, 0, 0, res);
 	}
