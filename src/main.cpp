@@ -448,6 +448,13 @@ int main( int argc, char *argv[] )
 		unsigned int const numDiv = std::ceil(std::log((double) res/blockDim)/std::log((double) subDiv));
 		// Calculate a dividable resolution for the blockSize:
 		unsigned int const correctedBlockSize = std::pow(subDiv,numDiv) * blockDim;
+		unsigned int maxThreads = 0;
+		for (unsigned int i = 0; i <= numDiv; i++) {
+			maxThreads += std::pow(subDiv, 2*i);
+		}
+		std::cout << "The corrected block size is " << correctedBlockSize << std::endl;
+		std::cout << "The number of divisions is " << numDiv << std::endl;
+		std::cout << "The maximum number of threads is " << maxThreads << std::endl;
 		// Mariani-Silver subdivision algorithm
 		marianiSilver(dwellBuffer, cmin, dc, 0, 0, correctedBlockSize, threaded);
 	} else {
