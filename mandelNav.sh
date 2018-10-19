@@ -114,7 +114,7 @@ while [ $EXEC -gt 0 ]; do
     printf "Step:           %s %%\n" $(echo "(($STEP - 1) * 100)" | bc -l)
     printf "Resolution:     %llux%llu\n\n" $RES $RES
     printf "Algorithm:      %s\n" $(echo $TRADITIONAL | grep -q '\-t' && echo "Traditional" || echo "Mariani-Silver")
-    printf "Threading:      %s\n" $(echo $THREADED | grep -q '\-a' && echo "Non-threaded" || echo "Threaded")
+    printf "Threading:      %s\n" $(echo $THREADED | grep -q '\-a' && echo "Threaded" || echo "Non-threaded")
     printf "Rendering time: %s\n\n" $TIME
     printf "[q] quit [h] help "
     [ $PAUSE -eq 1 ] && printf "[p] resume rendering" || printf "[p] pause rendering"
