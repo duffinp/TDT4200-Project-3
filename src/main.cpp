@@ -299,6 +299,22 @@ void marianiSilver( std::vector<std::vector<int>> &dwellBuffer,
 		computeBlock(dwellBuffer, cmin, dc, atY, atX, blockSize);
 		if (mark)
 			markBorder(dwellBuffer, dwellCompute, atY, atX, blockSize);
+	} else if (threaded) {
+		// Subdivision for the threaded version
+		unsigned int newBlockSize = blockSize / subDiv;
+		std::thread* mthreads = new std::thread[subDiv * subDiv];
+		unsigned int index;
+		for (unsigned int ydiv = 0; ydiv < subDiv; ydiv++) {
+			for (unsigned int xdiv = 0; xdiv < subDiv; xdiv++) {
+				index = ydiv * subDiv + xdiv;
+				mthreads[index] = std::thread(marianiSilver, std::ref(dwellBuffer), std::ref(cmin), std::ref(dc), atY + (ydiv * newBlockSize), atX + (xdiv * newBlockSize), newBlockSize, threaded);
+			}
+		}
+		for (unsigned int i = 0; i < subDiv*subDiv; i++) {
+			mthreads[i].join();
+		}
+		delete [] mthreads;
+		mthreads = NULL;
 	} else {
 		// Subdivision
 		unsigned int newBlockSize = blockSize / subDiv;
