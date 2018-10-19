@@ -207,24 +207,36 @@ typedef struct job {
    std::vector<std::vector<int>> &dwellBuffer;
    std::complex<double> const &cmin;
    std::complex<double> const &dc;
-   unsigned int const atY;
-   unsigned int const atX;
-   unsigned int const blockSize;
+   unsigned int atY;
+   unsigned int atX;
+   unsigned int blockSize;
 } job;
 
 // define mutex, condition variable and deque here
+std::deque<job> jobList;
 
-void addWork(/* parameters */)
+void addWork(std::vector<std::vector<int>> &dwellBuffer,
+   	std::complex<double> const &cmin,
+   	std::complex<double> const &dc,
+   	unsigned int const atY,
+   	unsigned int const atX,
+   	unsigned int const blockSize)
 {
+	//std::cout << "We are now going to create a job that we can push onto the deque." << std::endl;
+	job squareBlock = {dwellBuffer, cmin, dc, atY, atX, blockSize};
+	//std::cout << "We have now just declared a square block and will push it on the deque." << std::endl;
+	//std::cout << "The size of this block is " << blockSize << std::endl;
 
+	jobList.push_back(squareBlock);
+	//std::cout << "We have pushed a block onto the deque. The size is now " << jobList.size() << std::endl << std::endl;
 }
 
 void marianiSilver( std::vector<std::vector<int>> &dwellBuffer,
-					std::complex<double> const &cmin,
-					std::complex<double> const &dc,
-					unsigned int const atY,
-					unsigned int const atX,
-					unsigned int const blockSize)
+        				std::complex<double> const &cmin,
+       					std::complex<double> const &dc,
+        				unsigned int const atY,
+        				unsigned int const atX,
+        				unsigned int const blockSize)
 {
 	int dwell = commonBorder(dwellBuffer, cmin, dc, atY, atX, blockSize);
 	if ( dwell >= 0 ) {
@@ -240,7 +252,7 @@ void marianiSilver( std::vector<std::vector<int>> &dwellBuffer,
 		unsigned int newBlockSize = blockSize / subDiv;
 		for (unsigned int ydiv = 0; ydiv < subDiv; ydiv++) {
 			for (unsigned int xdiv = 0; xdiv < subDiv; xdiv++) {
-				marianiSilver(dwellBuffer, cmin, dc, atY + (ydiv * newBlockSize), atX + (xdiv * newBlockSize), newBlockSize);
+				addWork(dwellBuffer, cmin, dc, atY + (ydiv * newBlockSize), atX + (xdiv * newBlockSize), newBlockSize);
 			}
 		}
 	}
@@ -262,7 +274,17 @@ void help() {
 }
 
 void worker(void) {
-	// Currently I'm doing nothing
+	job* currentBlock;
+	while (jobList.size() > 0) {
+		//std::cout << "The size of the deque right now is " << jobList.size() << std::endl;
+		//std::cout << "We are now going to take a copy of the job at the front of the deque." << std::endl;
+		currentBlock = &jobList.at(0);
+		//std::cout << "We have successfully done so. The size of this block is " << currentBlock->blockSize << std::endl;
+		//std::cout << "We will now call the Mariani-Silver function" << std::endl << std::endl;
+		marianiSilver(currentBlock->dwellBuffer, currentBlock->cmin, currentBlock->dc, currentBlock->atY, currentBlock->atX, currentBlock->blockSize);
+		jobList.pop_front();
+		//std::cout << "We have popped a block from the deque. The size is now " << jobList.size() << std::endl << std::endl;
+	}
 }
 
 int main( int argc, char *argv[] )
@@ -359,7 +381,8 @@ int main( int argc, char *argv[] )
 		// Calculate a dividable resolution for the blockSize:
 		unsigned int const correctedBlockSize = std::pow(subDiv,numDiv) * blockDim;
 		// Mariani-Silver subdivision algorithm
-		marianiSilver(dwellBuffer, cmin, dc, 0, 0, correctedBlockSize);
+		addWork(dwellBuffer, cmin, dc, 0, 0, correctedBlockSize);
+		worker();
 	} else {
 		// Traditional Mandelbrot-Set computation or the 'Escape Time' algorithm
 		computeBlock(dwellBuffer, cmin, dc, 0, 0, res, 0);
